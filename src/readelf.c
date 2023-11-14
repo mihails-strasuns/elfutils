@@ -150,6 +150,8 @@ static const struct argp_option options[] =
     N_("Ignored for compatibility (lines always wide)"), 0 },
   { "decompress", 'z', NULL, 0,
     N_("Show compression information for compressed sections (when used with -S); decompress section before dumping data (when used with -p or -x)"), 0 },
+  { "filter-sections", 'f', "SUB-STRING", 0,
+    N_("Show only sections with a name having provided filter as a sub-string"), 0 },
   { NULL, 0, NULL, 0, NULL, 0 }
 };
 
@@ -248,6 +250,8 @@ static bool print_decompress = false;
 
 /* True if we want to show split compile units for debug_info skeletons.  */
 static bool show_split_units = false;
+
+static const char* section_filter = NULL;
 
 /* Select printing of debugging sections.  */
 static enum section_e
@@ -481,6 +485,9 @@ parse_opt (int key, char *arg,
       print_debug_sections |= section_exception;
       any_control_option = true;
       break;
+	case 'f':
+	  section_filter = arg;
+	  break;
     case 'g':
       print_section_groups = true;
       any_control_option = true;
@@ -1329,6 +1336,10 @@ There are %zd section headers, starting at offset %#" PRIx64 ":\n\
 	error_exit (0, _("cannot get section header: %s"),
 		    elf_errmsg (-1));
 
+      const char* section_name = elf_strptr (ebl->elf, shstrndx, shdr->sh_name);
+      if (!strstr(section_name, section_filter))
+	continue;
+
       char flagbuf[20];
       char *cp = flagbuf;
       if (shdr->sh_flags & SHF_WRITE)
@@ -2122,6 +2133,10 @@ handle_relocs_rel (Ebl *ebl, GElf_Ehdr *ehdr, Elf_Scn *scn, GElf_Shdr *shdr)
   if (unlikely (elf_getshdrstrndx (ebl->elf, &shstrndx) < 0))
     error_exit (0, _("cannot get section header string table index"));
 
+  const char* section_name = elf_strptr (ebl->elf, shstrndx, shdr->sh_name);
+  if (!strstr(section_name, section_filter))
+      return;
+
   if (shdr->sh_info != 0)
     printf (ngettext ("\
 \nRelocation section [%2zu] '%s' for section [%2u] '%s' at offset %#0" PRIx64 " contains %d entry:\n",
@@ -2129,7 +2144,7 @@ handle_relocs_rel (Ebl *ebl, GElf_Ehdr *ehdr, Elf_Scn *scn, GElf_Shdr *shdr)
 \nRelocation section [%2zu] '%s' for section [%2u] '%s' at offset %#0" PRIx64 " contains %d entries:\n",
 		      nentries),
 	    elf_ndxscn (scn),
-	    elf_strptr (ebl->elf, shstrndx, shdr->sh_name),
+	    section_name,
 	    (unsigned int) shdr->sh_info,
 	    elf_strptr (ebl->elf, shstrndx, destshdr->sh_name),
 	    shdr->sh_offset,
@@ -2144,7 +2159,7 @@ handle_relocs_rel (Ebl *ebl, GElf_Ehdr *ehdr, Elf_Scn *scn, GElf_Shdr *shdr)
 \nRelocation section [%2u] '%s' at offset %#0" PRIx64 " contains %d entries:\n",
 		      nentries),
 	    (unsigned int) elf_ndxscn (scn),
-	    elf_strptr (ebl->elf, shstrndx, shdr->sh_name),
+	    section_name,
 	    shdr->sh_offset,
 	    nentries);
   fputs_unlocked (class == ELFCLASS32
@@ -2311,6 +2326,10 @@ handle_relocs_rela (Ebl *ebl, GElf_Ehdr *ehdr, Elf_Scn *scn, GElf_Shdr *shdr)
   if (unlikely (elf_getshdrstrndx (ebl->elf, &shstrndx) < 0))
     error_exit (0, _("cannot get section header string table index"));
 
+  const char* section_name = elf_strptr (ebl->elf, shstrndx, shdr->sh_name);
+  if (!strstr(section_name, section_filter))
+      return;
+
   if (shdr->sh_info != 0)
     printf (ngettext ("\
 \nRelocation section [%2zu] '%s' for section [%2u] '%s' at offset %#0" PRIx64 " contains %d entry:\n",
@@ -2318,7 +2337,7 @@ handle_relocs_rela (Ebl *ebl, GElf_Ehdr *ehdr, Elf_Scn *scn, GElf_Shdr *shdr)
 \nRelocation section [%2zu] '%s' for section [%2u] '%s' at offset %#0" PRIx64 " contains %d entries:\n",
 		    nentries),
 	  elf_ndxscn (scn),
-	  elf_strptr (ebl->elf, shstrndx, shdr->sh_name),
+	  section_name,
 	  (unsigned int) shdr->sh_info,
 	  elf_strptr (ebl->elf, shstrndx, destshdr->sh_name),
 	  shdr->sh_offset,
@@ -2333,7 +2352,7 @@ handle_relocs_rela (Ebl *ebl, GElf_Ehdr *ehdr, Elf_Scn *scn, GElf_Shdr *shdr)
 \nRelocation section [%2u] '%s' at offset %#0" PRIx64 " contains %d entries:\n",
 		      nentries),
 	    (unsigned int) elf_ndxscn (scn),
-	    elf_strptr (ebl->elf, shstrndx, shdr->sh_name),
+	    section_name,
 	    shdr->sh_offset,
 	    nentries);
   fputs_unlocked (class == ELFCLASS32
@@ -2481,6 +2500,10 @@ handle_relocs_relr (Ebl *ebl, Dwfl_Module *mod, Elf_Scn *scn, GElf_Shdr *shdr)
   if (unlikely (elf_getshdrstrndx (ebl->elf, &shstrndx) < 0))
     error_exit (0, _("cannot get section header string table index"));
 
+  const char* section_name = elf_strptr (ebl->elf, shstrndx, shdr->sh_name);
+  if (!strstr(section_name, section_filter))
+      return;
+
   /* A .relr.dyn section does not refer to a specific section.  */
   printf (ngettext ("\
 \nRelocation section [%2u] '%s' at offset %#0" PRIx64 " contains %d entry:\n",
@@ -2488,7 +2511,7 @@ handle_relocs_relr (Ebl *ebl, Dwfl_Module *mod, Elf_Scn *scn, GElf_Shdr *shdr)
 \nRelocation section [%2u] '%s' at offset %#0" PRIx64 " contains %d entries:\n",
 		    nentries),
 	  (unsigned int) elf_ndxscn (scn),
-	  elf_strptr (ebl->elf, shstrndx, shdr->sh_name),
+	  section_name,
 	  shdr->sh_offset,
 	  nentries);
 
